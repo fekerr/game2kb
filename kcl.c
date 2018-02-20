@@ -60,8 +60,8 @@ char *inv_str = "*INV*";
 // TODO: a better way?
 // "unprintable" currently listed here as underscores
 
-char ev_keymap_printable[]="__123456789-=_\tqwertyuiop{}__" \
-    "asdfghjkl;\'__zxcvbnm,./";
+char ev_keymap_printable[]="__1234567890-=_\tqwertyuiop{}__" \
+    "asdfghjkl;\'`_\\zxcvbnm,./";
 
 
 
@@ -123,7 +123,22 @@ int read_ev(int fd, struct input_event ev[], char *device)
 
     for(i=0; i < events; ++i)
     {
-        printf("(%ld.%ld):%d:%d:%d\n", ev[i].time.tv_sec, ev[i].time.tv_usec, ev[i].type, ev[i].code, ev[i].value);
+        if(ev[i].type == EV_KEY && ev[i].value == 1)
+        {
+            printf("(%ld.%ld):%s:%d(%c)\n", ev[i].time.tv_sec, ev[i].time.tv_usec,
+                    map_event(ev[i].type),
+                    ev[i].code, map_key(ev[i].code));
+        }
+#if 0
+        else
+        {
+            printf("(%ld.%ld):%d(%s):%d:%d\n", ev[i].time.tv_sec, ev[i].time.tv_usec,
+                    ev[i].type, map_event(ev[i].type),
+                    ev[i].code, 
+                    ev[i].value);
+        }
+#endif
+
 #if 0
         value = ev[i].value;
 
