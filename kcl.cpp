@@ -1,8 +1,8 @@
+// fekerr 20180225
+// working to create "the dumbest game in the world"
+// so my 4-year old son and I can bang on two separate keyboards :)
+
 // http://www.thelinuxdaily.com/2010/05/grab-raw-keyboard-input-from-event-device-node-devinputevent/
-//
-// fekerr 20180205 pi
-// fekerr laptop 20180216 - manually updated
-// fekerr hsw 20180217
 
 // Other notes:
 // sudo lsinput (input-utils)
@@ -76,6 +76,14 @@ const char *ev_types_str[EV_CNT] =
 
 const char *inv_str = "*INV*";
 
+// key map for a few keys from KEY_ in linux/input-event-codes.h
+// TODO: a better way?
+// "unprintable" currently listed here as underscores
+
+const char ev_keymap_printable[]="__1234567890-=_\tqwertyuiop{}__" \
+    "asdfghjkl;\'`_\\zxcvbnm,./";
+const size_t KEYLIST_SIZE=sizeof(ev_keymap_printable);
+
 struct keysmain
 {
     keysmain();
@@ -84,27 +92,26 @@ struct keysmain
     char *device0;
     char *device1;
     bool switch_onedev;
+    int keysbanged[2][KEYLIST_SIZE];
 };
 
 keysmain::keysmain()
 {
+    size_t i; // unsigned for comparison with sizeof. Now was that a silly warning?
+
     fd0 = -1;
     fd1 = -1;
     device0 = NULL;
     device1 = NULL;
     switch_onedev=FALSE;
+
+    for(i=0; i<KEYLIST_SIZE; ++i)
+    {
+        keysbanged[0][i]=0;
+        keysbanged[1][i]=0;
+    }
 }
 
-
-// key map for a few keys from KEY_ in linux/input-event-codes.h
-// TODO: a better way?
-// "unprintable" currently listed here as underscores
-
-const char ev_keymap_printable[]="__1234567890-=_\tqwertyuiop{}__" \
-    "asdfghjkl;\'`_\\zxcvbnm,./";
-
-
-//TODO: original lacked \n etc.
 void handler (int sig)
 {
     printf ("\nexiting...(%d)\n", sig);
@@ -177,6 +184,7 @@ int read_ev(keysmain & progMgmt, int devnum)
         if(ev[i].type == EV_KEY && ev[i].value == 1)
         {
             //TODO: blah comparison being stupid
+            //(I know it's me.)
             cout << "mapkey=" << map_key(ev[i].code) << "," << (int) map_key(ev[i].code) << endl;
             cout << (int) '_' << endl;
 
@@ -186,6 +194,7 @@ int read_ev(keysmain & progMgmt, int devnum)
                 printf("(%ld.%ld):%s:%d(%c)\n", ev[i].time.tv_sec, ev[i].time.tv_usec,
                         map_event(ev[i].type),
                         ev[i].code, map_key(ev[i].code));
+                ++progMgmt.keysbanged[devnum][ev[i].code];
             }
             else
             {
@@ -220,6 +229,7 @@ int read_ev(keysmain & progMgmt, int devnum)
 void progHelp()
 {
     cout << "TODO: help" << endl;
+    cout << "*cough* this silly thing requires sudo :p" << endl;
 
     cout << "Please specify (on the command line) the paths to the two dev event interface devices." << endl;
 
@@ -305,60 +315,45 @@ int args(int argc, char *argv[], keysmain & progMgmt)
 
 int main (int argc, char *argv[])
 {
-//    struct input_event ev[64];
-//    int fd0;
-//    int fd1;
-//    char name[256] = "Unknown";
-//    char *device0 = NULL;
-//    char *device1 = NULL;
     int args_proc;  // return from args processing.
     keysmain progMgmt;
+    size_t i;
+    size_t j;
 
     args_proc = args(argc, argv, progMgmt);
     if(args_proc)
     {
         cout << "dbg: err ret from args_proc(): " << args_proc << endl;
     }
-#if 0
-    //Setup check
-    if (argc < 2){
-        printf("Please specify (on the command line) the paths to the two dev event interface devices.\n");
-        exit (0);
-    }
-#endif
 
     if ((getuid ()) != 0)
         printf ("You are not root! This may not work...\n");
-#if 0
-    if (argc > 1)
-        device0 = argv[1];
-    if (argc > 2)
-        device1 = argv[2];
-
-    //Open Device
-    //TODO: nonblocking: O_RDONLY | O_NONBLOCK
-    if ((fd0 = open (device0, O_RDONLY | O_NONBLOCK)) == -1)
-        printf ("%s is not a valid device.\n", device0);
-    if ((fd1 = open (device1, O_RDONLY | O_NONBLOCK)) == -1)
-        printf ("%s is not a valid device.\n", device1);
-
-    //Print Device0 Name
-    ioctl (fd0, EVIOCGNAME (sizeof (name)), name);
-    printf ("Reading from : %s (%s)\n", device0, name);
-
-    //Print Device1 Name
-    ioctl (fd1, EVIOCGNAME (sizeof (name)), name);
-    printf ("Reading from : %s (%s)\n", device1, name);
-
-#endif
-
-    while (1){
+    for(i=0; i<100000000; ++i)
+    {
         printf("0");
         read_ev(progMgmt, 0);
+        if(!(i%25))
+        {
+            cout << "Player 0, thou bangst:\n";
+            for(j=0;j<KEYLIST_SIZE;++j)
+            {
+                cout << progMgmt.keysbanged[0][j] << " ";
+            }
+            cout << endl;
+        }
         if(progMgmt.fd1 != -1)
         {
             printf("1");
             read_ev(progMgmt, 1);
+            if(!(i%25))
+            {
+                cout << "Player 1, thou bangst:\n";
+                for(j=0;j<KEYLIST_SIZE;++j)
+                {
+                    cout << progMgmt.keysbanged[1][j] << " ";
+                }
+                cout << endl;
+            }
         }
         sleep(1);
    }
