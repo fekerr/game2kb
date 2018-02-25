@@ -4,6 +4,12 @@
 // fekerr laptop 20180216 - manually updated
 // fekerr hsw 20180217
 
+// Other notes:
+// sudo lsinput (input-utils)
+// sudo evemu-record (evemu)
+
+// hybrid C++, working to convert to more C++
+
 // TODO: find if all these includes are really needed.
 #include <stdio.h>
 #include <stdlib.h>
@@ -24,6 +30,20 @@
 #include <signal.h>
 
 #include <unistd.h> // for sleep().
+
+// Working to convert to C++.
+#include <iostream>
+#include <cctype>
+#include <cstring>
+#include <fstream>
+using namespace std;
+
+#ifndef FALSE
+const int FALSE = 0;
+#ifndef TRUE
+const int TRUE = !FALSE;
+#endif
+#endif
 
 // Strings from data defined in linux/input-event-codes.h
 // TODO: a better way?
@@ -56,13 +76,32 @@ const char *ev_types_str[EV_CNT] =
 
 const char *inv_str = "*INV*";
 
+struct keysmain
+{
+    keysmain();
+    int fd0;
+    int fd1;
+    char *device0;
+    char *device1;
+    bool switch_onedev;
+};
+
+keysmain::keysmain()
+{
+    fd0 = -1;
+    fd1 = -1;
+    device0 = NULL;
+    device1 = NULL;
+    switch_onedev=FALSE;
+}
+
+
 // key map for a few keys from KEY_ in linux/input-event-codes.h
 // TODO: a better way?
 // "unprintable" currently listed here as underscores
 
-const char ev_keymap_printable[]="__123456789-=_\tqwertyuiop{}__" \
-    "asdfghjkl;\'__zxcvbnm,./";
-
+const char ev_keymap_printable[]="__1234567890-=_\tqwertyuiop{}__" \
+    "asdfghjkl;\'`_\\zxcvbnm,./";
 
 
 //TODO: original lacked \n etc.
@@ -104,12 +143,24 @@ const char map_key(int ev_key)
     }
 }
 
-int read_ev(int fd, struct input_event ev[], char *device)
+int read_ev(keysmain & progMgmt, int devnum)
 {
+    struct input_event ev[64];
+    const int size = sizeof (struct input_event);
     int i;
     int rd;
-    int size = sizeof (struct input_event); // TODO: const int
     int events;
+    int fd;
+    char *device;
+
+    fd = progMgmt.fd0;
+    device = progMgmt.device0;
+    if(devnum == 1)
+    {
+        fd = progMgmt.fd1;
+        device = progMgmt.device1;
+    }
+    cout << "read_ev: fd, device = " << fd << "," << device << endl;
 
     if ((rd = read (fd, ev, size * 64)) < size)
     {
@@ -123,7 +174,38 @@ int read_ev(int fd, struct input_event ev[], char *device)
 
     for(i=0; i < events; ++i)
     {
-        printf("(%ld.%ld):%d:%d:%d\n", ev[i].time.tv_sec, ev[i].time.tv_usec, ev[i].type, ev[i].code, ev[i].value);
+        if(ev[i].type == EV_KEY && ev[i].value == 1)
+        {
+            //TODO: blah comparison being stupid
+            cout << "mapkey=" << map_key(ev[i].code) << "," << (int) map_key(ev[i].code) << endl;
+            cout << (int) '_' << endl;
+
+            if(map_key(ev[i].code != '_'))
+            {
+                cout << "111" << endl;
+                printf("(%ld.%ld):%s:%d(%c)\n", ev[i].time.tv_sec, ev[i].time.tv_usec,
+                        map_event(ev[i].type),
+                        ev[i].code, map_key(ev[i].code));
+            }
+            else
+            {
+                cout << "222" << endl;
+                printf("(%ld.%ld):%s:%d\n", ev[i].time.tv_sec, ev[i].time.tv_usec,
+                        map_event(ev[i].type),
+                        ev[i].code);
+            }
+        }
+
+#if 0
+        else
+        {
+            printf("(%ld.%ld):%d(%s):%d:%d\n", ev[i].time.tv_sec, ev[i].time.tv_usec,
+                    ev[i].type, map_event(ev[i].type),
+                    ev[i].code, 
+                    ev[i].value);
+        }
+#endif
+
 #if 0
         value = ev[i].value;
 
@@ -135,29 +217,119 @@ int read_ev(int fd, struct input_event ev[], char *device)
     return rd;
 }
 
+void progHelp()
+{
+    cout << "TODO: help" << endl;
+
+    cout << "Please specify (on the command line) the paths to the two dev event interface devices." << endl;
+
+    cout << "switch -1 for just one device for debug\n"
+        << "switch -h for this help\n"
+        << endl;
+ 
+}
+
+int args(int argc, char *argv[], keysmain & progMgmt)
+{
+    int i;
+    char name[256] = "Unknown";
+
+    for(i=0; i<argc; ++i)
+    {
+        cout << i << ": " << argv[i] << "\n" << endl;
+        if(i>0)
+        {
+            if(argv[i][0] == '-' && argv[i][1] == '1')
+            {
+                progMgmt.switch_onedev=TRUE;
+                continue;
+            }
+            if(argv[i][0] == '-' && argv[i][1] == 'h')
+            {
+                progHelp();
+                continue;
+            }
+            if(progMgmt.fd0 == -1)
+            {
+                progMgmt.device0 = argv[i];
+                if ((progMgmt.fd0 = open (progMgmt.device0, O_RDONLY | O_NONBLOCK)) == -1)
+                {
+                    printf ("%s is not a valid device.\n", progMgmt.device0);
+                    continue;
+                }
+                //Print Device0 Name
+                ioctl (progMgmt.fd0, EVIOCGNAME (sizeof (name)), name);
+                printf ("Reading from : %s (%s)\n", progMgmt.device0, name);
+
+          }
+            if(!progMgmt.switch_onedev && progMgmt.fd1 == -1)
+            {
+                progMgmt.device1 = argv[i];
+                if ((progMgmt.fd1 = open (progMgmt.device1, O_RDONLY | O_NONBLOCK)) == -1)
+                {
+                    printf ("%s is not a valid device.\n", progMgmt.device1);
+                    continue;
+                }
+                //Print Device1 Name
+                ioctl (progMgmt.fd1, EVIOCGNAME (sizeof (name)), name);
+                printf ("Reading from : %s (%s)\n", progMgmt.device1, name);
+            }
+        }
+    }
+
+    // validate arguments and final status.
+    if(argc < 2)
+    {
+        progHelp();
+    }
+
+    //TODO: check states of fd0, fd1 and switch_onedev....
+    // null is messing up cout?
+#if 0
+    cout << "dbg: fd0, device0, device1, fd1, onedev="
+        << progMgmt.fd0 << ",\"" << progMgmt.device0 << "\""
+        << progMgmt.fd1 << ",\"" << progMgmt.device1 << "\""
+        <<  progMgmt.switch_onedev
+        << endl << endl;
+#endif
+
+    cout << "dbg: fd0," << progMgmt.fd0;
+    cout << " device0=" << progMgmt.device0;
+    cout << " fd1," << progMgmt.fd1;
+    cout << " device1=" << progMgmt.device1;
+    cout << " onedev=" << progMgmt.switch_onedev;
+    cout << endl << endl;
+
+    return 0; // TODO: ...
+}
+
 int main (int argc, char *argv[])
 {
-    struct input_event ev[64];
-    int fd0;
-    int fd1;
-//    int rd;
-//    int value;
-//    int size = sizeof (struct input_event);
-    char name[256] = "Unknown";
-    char *device0 = NULL;
-    char *device1 = NULL;
-//    int events;
-//    int i; //fek
+//    struct input_event ev[64];
+//    int fd0;
+//    int fd1;
+//    char name[256] = "Unknown";
+//    char *device0 = NULL;
+//    char *device1 = NULL;
+    int args_proc;  // return from args processing.
+    keysmain progMgmt;
 
+    args_proc = args(argc, argv, progMgmt);
+    if(args_proc)
+    {
+        cout << "dbg: err ret from args_proc(): " << args_proc << endl;
+    }
+#if 0
     //Setup check
     if (argc < 2){
         printf("Please specify (on the command line) the paths to the two dev event interface devices.\n");
         exit (0);
     }
+#endif
 
     if ((getuid ()) != 0)
         printf ("You are not root! This may not work...\n");
-
+#if 0
     if (argc > 1)
         device0 = argv[1];
     if (argc > 2)
@@ -178,11 +350,16 @@ int main (int argc, char *argv[])
     ioctl (fd1, EVIOCGNAME (sizeof (name)), name);
     printf ("Reading from : %s (%s)\n", device1, name);
 
+#endif
+
     while (1){
         printf("0");
-        read_ev(fd0, ev, device0);
-        printf("1");
-        read_ev(fd1, ev, device1);
+        read_ev(progMgmt, 0);
+        if(progMgmt.fd1 != -1)
+        {
+            printf("1");
+            read_ev(progMgmt, 1);
+        }
         sleep(1);
    }
 
