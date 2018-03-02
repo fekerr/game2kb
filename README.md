@@ -1,3 +1,6 @@
+20180202 fekerr
+This "project" is going on a back burner since I got an RPi3b for my son to use and I'll probably just do something "sane" like ssh into it. :)
+
 # game2kb
 (Work in progress!)
 
